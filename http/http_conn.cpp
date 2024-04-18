@@ -116,7 +116,7 @@ void http_conn::init(int sockfd, const sockaddr_in &addr, TRIGMode mode){
     m_sockfd = sockfd;
     m_address = addr;
     addfd(get_m_epollfd(), sockfd, true, mode);
-    get_m_user_count()++;
+    m_user_count.fetch_add(1);
     init();
 
 }
@@ -152,6 +152,7 @@ bool http_conn::read_once(){
         m_read_idx += bytes_read;
         return true;
     }
+    assert(0);
 }
 
 http_conn::LINE_STATUS http_conn::parse_line(){
@@ -469,6 +470,7 @@ bool http_conn::add_headers(int content_len){
     add_linger();
     add_cookies();
     add_blank_line();
+    return true;
 }
 
 bool http_conn::add_linger(){
@@ -692,11 +694,12 @@ void http_conn::process(){
 
 void http_conn::close_conn(bool real_close){
     if(real_close){
-        removefd(get_m_epollfd(), m_sockfd);
         // std::cout << "close: " << m_sockfd << std::endl;
+        int sockfd = m_sockfd;
         m_sockfd = -1;
         user_name = "";
         cookies.clear();
-        get_m_user_count()--;
+        m_user_count.fetch_sub(1);
+        removefd(get_m_epollfd(), sockfd);
     }
 }

@@ -23,11 +23,12 @@ static int epollfd = 0;
 
 int pipefd[2];
 
-std::unordered_map<int, http_conn> users;
+std::unordered_map<int, std::shared_ptr<http_conn>> users;
 
 void addfd(int epollfd, int fd, bool one_shot, TRIGMode mode);
 int setnonblocking(int fd);
 std::unique_ptr<time_heap> timers;
+std::atomic<int> http_conn::m_user_count(0);
 
 void sig_handler(int sig){
     //触发信号不会改变errno，因此这里的errno就是触发信号前的errno
@@ -37,6 +38,53 @@ void sig_handler(int sig){
     send(pipefd[1], (char *) &msg, 1, 0); //管道的0是读端，1是写端，将信号从管道的写端写入
     errno = save_errno;
     
+}
+
+void timer_update(int fd, int delay){
+    LOG_INFO("%s", "adjust timer once");
+    Log::get_instance()->flush();
+    timers->adjust_timer(fd, time(NULL) + delay);
+}
+
+void do_read(std::unordered_map<int, std::shared_ptr<http_conn>> &users, std::weak_ptr<threadpool> pool, int sockfd){
+    bool read_ret = users[sockfd]->read_once();
+    if(read_ret){
+        LOG_INFO("deal with the client(%s)", inet_ntoa(users[sockfd]->get_address()->sin_addr));
+        Log::get_instance()->flush();
+        std::shared_ptr<threadpool> pool_ptr = pool.lock();
+        if(pool_ptr == nullptr){
+            assert(0);
+            return;
+        }
+        // pool_ptr->append(std::bind(&http_conn::process, users[sockfd]));
+        users[sockfd]->process();
+        timer_update(sockfd, 3 * TIMESLOT);
+    }
+    else{
+        timer_update(sockfd, 3 * TIMESLOT);
+        timers->release_timer(sockfd);
+    }
+}
+
+void do_write(std::unordered_map<int, std::shared_ptr<http_conn>> &users, std::weak_ptr<threadpool> pool, int sockfd){
+    bool read_ret = users[sockfd]->write();
+    if(read_ret){
+        LOG_INFO("deal with the client(%s)", inet_ntoa(users[sockfd]->get_address()->sin_addr));
+        Log::get_instance()->flush();
+        std::shared_ptr<threadpool> pool_ptr = pool.lock();
+        if(pool_ptr == nullptr){
+            assert(0);
+            return;
+        }
+        // pool_ptr->append(std::bind(&http_conn::process, &users[sockfd]));
+        // pool_ptr->append(std::bind(&http_conn::process, users[sockfd]));
+        users[sockfd]->process();
+        timer_update(sockfd, 3 * TIMESLOT);
+    }
+    else{
+        timer_update(sockfd, 3 * TIMESLOT);
+        timers->release_timer(sockfd);
+    }
 }
 
 void addsig(int sig, void (handler) (int), bool restart = true){
@@ -68,25 +116,19 @@ void cb_func(int fd){
     //assert( user_data );
     //users_timer.erase(user_data->sockfd);
     timers->del_timer(fd);
-    users[fd].close_conn();
+    users[fd]->close_conn();
     // users.erase(fd);
     LOG_INFO("close fd %d", fd);
     Log::get_instance()->flush();
 }
 
-void timer_update(int fd){
-    LOG_INFO("%s", "adjust timer once");
-    Log::get_instance()->flush();
-    timers->adjust_timer(fd, time(NULL) + 3 * TIMESLOT);
-}
-
 int main(int argc, char *argv[]){
-     /*if(!SYNLOG){
+     if(!SYNLOG){
          Log::get_instance()->init("ServerLog", 2000, 800000, 8); //异步日志模型
      }
      else{
          Log::get_instance()->init("ServerLog", 2000, 800000, 0); //同步日志模型
-     }*/
+     }
 
     if (argc <= 1){
         printf("usage: %s ip_address port_number\n", basename(argv[0]));
@@ -100,7 +142,7 @@ int main(int argc, char *argv[]){
 
     std::shared_ptr<threadpool> pool = std::make_shared<threadpool>(connPool, 16);
 
-    users[0].initmysql_result(connPool);
+    users[0]->initmysql_result(connPool);
 
     // std::vector<epoll_event> events(MAX_EVENT_NUMBER);
     epoll_event events[MAX_EVENT_NUMBER];
@@ -175,9 +217,16 @@ int main(int argc, char *argv[]){
                         LOG_ERROR("%s", "Internal server busy");
                         continue;
                     }
-                    assert(users[connfd].m_sockfd == -1);
-                    users[connfd].init(connfd, client_address, connection_mode);
-                    users[connfd].pool = connPool;
+                    if(users.find(connfd) == users.end())
+                        users[connfd] = std::make_shared<http_conn>();
+                    auto test = users[connfd];
+                    if(test->m_sockfd != -1){
+                        assert(0);
+                        // sleep(10);
+                    }
+                    // assert(users[connfd]->m_sockfd == -1);
+                    users[connfd]->init(connfd, client_address, connection_mode);
+                    users[connfd]->pool = connPool;
                     timers->add_timer(connfd, 3 * TIMESLOT, cb_func);
                 }
                 else{
@@ -192,15 +241,17 @@ int main(int argc, char *argv[]){
                             LOG_ERROR("%s", "Internal server busy");
                             break;
                         } 
-                        users[connfd].init(connfd, client_address, connection_mode);
-                        users[connfd].pool = connPool;
+                        if(users.find(connfd) == users.end())
+                            users[connfd] = std::make_shared<http_conn>();
+                        users[connfd]->init(connfd, client_address, connection_mode);
+                        users[connfd]->pool = connPool;
                         timers->add_timer(connfd, 3 * TIMESLOT, &cb_func);
                         continue;
                     }
                 }
             }
             else if(events[i].events & (EPOLLHUP | EPOLLRDHUP | EPOLLERR)){
-                users[sockfd].close_conn();
+                users[sockfd]->close_conn();
             }
             else if ((sockfd == pipefd[0]) && (events[i].events & EPOLLIN)){
                 int sig;
@@ -231,27 +282,14 @@ int main(int argc, char *argv[]){
                 }
             }
             else if(events[i].events & EPOLLIN){
-                if(users[sockfd].read_once()){
-                    LOG_INFO("deal with the client(%s)", inet_ntoa(users[sockfd].get_address()->sin_addr));
-                    Log::get_instance()->flush();
-                    pool->append(std::bind(&http_conn::process, &users[sockfd]));
-                    timer_update(sockfd);
-                }
-                else{
-                    timers->release_timer(sockfd);
-
-                }
+                timer_update(sockfd, 100 * TIMESLOT);
+                pool->append(std::bind(do_read, users, pool, sockfd));
+                // do_read(users, pool, sockfd);
             }
             else if(events[i].events & EPOLLOUT){
-                if(users[sockfd].write()){
-                    LOG_INFO("send data to the client(%s)", inet_ntoa(users[sockfd].get_address()->sin_addr));
-                    Log::get_instance()->flush();
-                    // pool->append(std::bind(&http_conn::process, &users[sockfd]));
-                    timer_update(sockfd);
-                }
-                else{
-                    timers->release_timer(sockfd);
-                }
+                timer_update(sockfd, 100 * TIMESLOT);
+                pool->append(std::bind(do_write, users, pool, sockfd));
+                // do_write(users, pool, sockfd);
             }
 
         }

@@ -27,6 +27,7 @@
 #include <random>
 #include "../log/log.h"
 #include "../CGImysql/sql_connection_pool.h"
+#include<atomic>
 
 enum TRIGMode{ET, LT};
 
@@ -73,7 +74,7 @@ public:
     };
 
 public:
-    http_conn() {registered = false; m_sockfd = -1;};
+    http_conn() {registered = true; m_sockfd = -1;};
     ~http_conn() = default;
 
 public:
@@ -83,7 +84,7 @@ public:
     bool read_once();
     bool write();
     static int &get_m_epollfd(){ static int m_epollfd; return m_epollfd;}
-    static int &get_m_user_count(){ static int m_user_count; return m_user_count;}
+    static int get_m_user_count(){ return m_user_count.load();}
     sockaddr_in *get_address()
     {
         return &m_address;
@@ -111,6 +112,7 @@ private:
     bool add_blank_line();
     bool add_cookies();
     void get_cookie(const std::string &text);
+    static std::atomic<int> m_user_count;
 
 public:
     MYSQL *mysql;

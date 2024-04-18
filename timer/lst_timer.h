@@ -2,6 +2,7 @@
 #include <memory>
 #include <functional>
 #include <netinet/in.h>
+#include <mutex>
 
 class heap_timer;
 
@@ -35,20 +36,12 @@ public:
 
     }
     void add_timer(int fd, int delay, const std::function<void(int)> &cb_func){
+        std::lock_guard<std::mutex> lock(mutex);
         if(fd2id.find(fd) == fd2id.end()){
             array.emplace_back(fd, delay, cb_func);
             int hole = array.size() - 1;
             fd2id[fd] = hole;
-            while(hole > 0){
-                int parent = (hole - 1) / 2;
-                if(array[parent].expire > array[hole].expire){
-                    swap_timer(parent, hole);
-                }
-                else{
-                    break;
-                }
-                hole = parent;
-            }
+            up(hole);
         }
         else{
             // assert(array[fd2id[fd]].cb_func == nullptr);
@@ -61,6 +54,7 @@ public:
     }
 
     void del_timer(int fd){
+        //std::lock_guard<std::mutex> lock(mutex);
         array[fd2id[fd]].cb_func = nullptr;
         assert(array.size() == fd2id.size());
     }
@@ -82,17 +76,25 @@ public:
     }
 
     void adjust_timer(int fd, time_t timeout){
+        std::lock_guard<std::mutex> lock(mutex);
         assert(fd2id.find(fd) != fd2id.end());
+        int old_expire = array[fd2id[fd]].expire;
         array[fd2id[fd]].expire = timeout;
-        percolate_down(fd2id[fd]);
+        if(old_expire < timeout)
+            percolate_down(fd2id[fd]);
+        else if(old_expire > timeout)
+            up(fd2id[fd]);
     }
 
     void release_timer(int fd){
-        array[fd2id[fd]].cb_func(fd);
+        std::lock_guard<std::mutex> lock(mutex);
+        if(array[fd2id[fd]].cb_func != nullptr)
+            array[fd2id[fd]].cb_func(fd);
     }
 
     void tick(){
         time_t cur = time(NULL);
+        std::lock_guard<std::mutex> lock(mutex);
         while(!array.empty()){
             // if(!array[0]){
             //     break;
@@ -126,6 +128,20 @@ private:
             hole = child;
         }
     }
+
+    void up(int hole){
+        while(hole > 0){
+            int parent = (hole - 1) / 2;
+            if(array[parent].expire > array[hole].expire){
+                swap_timer(parent, hole);
+            }
+            else{
+                break;
+            }
+            hole = parent;
+        }
+    }
     std::vector<heap_timer> array;
     std::unordered_map<int, int> fd2id;
+    std::mutex mutex;
 };

@@ -3,9 +3,12 @@
 
 std::string doc_root = "/root/webserver/root";
 
+const int cache_contral = 30;
+
 std::mutex m_mutex;
 std::unordered_map<int, std::string> titles = {
     {200,  "OK"},
+    {304,  "Not Modified"},
     {400, "Bad Request"},
     {403, "Forbidden"},
     {404, "Not Found"},
@@ -347,8 +350,8 @@ http_conn::HTTP_CODE http_conn::do_request()
         //将用户名和密码提取出来
         //user=123&passwd=123
         std::string name, password;
-        name = m_string.substr(5, m_string.find("&"));
-        password = m_string.substr(m_string.find("&") + 8, m_string.size() - name.size() - 1);
+        name = m_string.substr(5, m_string.find("&") - 5);
+        password = m_string.substr(m_string.find("&") + 10, m_string.size() - name.size() - 10);
 
 
         if (m_url[index + 1] == '3')
@@ -415,6 +418,10 @@ http_conn::HTTP_CODE http_conn::do_request()
     else
         m_real_file = doc_root + m_url;
 
+    // if(m_headers["If-None-Match"] == "111111111111")
+    //     return RELOCATION;
+
+
     // stat()函数是用来获取文件的状态信息的函数之一。它可以用来获取文件的各种属性，比如文件大小、权限、创建时间等。
     // buf参数是一个指向stat结构的指针，用于存储获取到的文件状态信息。成功调用stat()函数会返回0，失败则返回-1，并设置errno以指示错误的原因。
     if (stat(m_real_file.c_str(), &m_file_stat) < 0){
@@ -469,6 +476,7 @@ bool http_conn::add_headers(int content_len){
     add_content_length(content_len);
     add_linger();
     add_cookies();
+    add_cache();
     add_blank_line();
     return true;
 }
@@ -488,7 +496,7 @@ bool http_conn::add_cookies(){
     // else{
         std::random_device rd;
         std::mt19937 gen(rd());
-        std::uniform_int_distribution<int> distr;
+        std::uniform_int_distribution<long long> distr;
         // std::hash<std::string> hasher;
         // size_t hashValue = hasher(user_name);
         std::string token = std::to_string(distr(gen));
@@ -499,6 +507,11 @@ bool http_conn::add_cookies(){
     else{
         return false;
     }
+}
+
+bool http_conn::add_cache(){
+    add_response("Etag: %lld\r\n", 111111111111);
+    return add_response("Cache-Control: max-age=%d\r\n", cache_contral);
 }
 
 bool http_conn::add_content(const std::string &content){
@@ -550,6 +563,10 @@ bool http_conn::process_write(HTTP_CODE read_ret){
             add_headers(formats[500].size());
             if(!add_content(formats[500]))
                 return false;
+            break;
+        case RELOCATION:
+            add_status_line(304, titles[304]);
+            add_headers(formats[304].size());
             break;
         default:
             return false;
@@ -632,6 +649,7 @@ bool http_conn::write()
 
         temp = writev(m_sockfd, m_iv, m_iv_count);
         // std::cout << "ttttttttttt: " << temp << std::endl;
+        // std::cout << "temp: " << temp << " sockfd: " << m_sockfd << std::endl;
 
         if (temp < 0)
         {

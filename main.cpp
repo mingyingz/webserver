@@ -56,12 +56,13 @@ void do_read(std::unordered_map<int, std::shared_ptr<http_conn>> &users, std::we
             assert(0);
             return;
         }
-        // pool_ptr->append(std::bind(&http_conn::process, users[sockfd]));
-        users[sockfd]->process();
-        timer_update(sockfd, 3 * TIMESLOT);
+        pool_ptr->append(std::bind(&http_conn::process, users[sockfd]));
+        // users[sockfd]->process();
+        // timer_update(sockfd, 3 * TIMESLOT);
     }
     else{
-        timer_update(sockfd, 3 * TIMESLOT);
+        // std::cout << "rrrrrrr: " << sockfd << std::endl;
+        // timer_update(sockfd, 10 * TIMESLOT);
         timers->release_timer(sockfd);
     }
 }
@@ -71,18 +72,20 @@ void do_write(std::unordered_map<int, std::shared_ptr<http_conn>> &users, std::w
     if(read_ret){
         LOG_INFO("deal with the client(%s)", inet_ntoa(users[sockfd]->get_address()->sin_addr));
         Log::get_instance()->flush();
-        std::shared_ptr<threadpool> pool_ptr = pool.lock();
-        if(pool_ptr == nullptr){
-            assert(0);
-            return;
-        }
+        // std::shared_ptr<threadpool> pool_ptr = pool.lock();
+        // if(pool_ptr == nullptr){
+        //     assert(0);
+        //     return;
+        // }
         // pool_ptr->append(std::bind(&http_conn::process, &users[sockfd]));
         // pool_ptr->append(std::bind(&http_conn::process, users[sockfd]));
-        users[sockfd]->process();
-        timer_update(sockfd, 3 * TIMESLOT);
+        // users[sockfd]->process();
+        // timer_update(sockfd, 3 * TIMESLOT);
     }
     else{
-        timer_update(sockfd, 3 * TIMESLOT);
+        // timer_update(sockfd, 10 * TIMESLOT);
+        
+        // std::cout << "wwwwwwwwww: " << sockfd << std::endl;
         timers->release_timer(sockfd);
     }
 }
@@ -123,12 +126,12 @@ void cb_func(int fd){
 }
 
 int main(int argc, char *argv[]){
-     if(!SYNLOG){
-         Log::get_instance()->init("ServerLog", 2000, 800000, 8); //异步日志模型
-     }
-     else{
-         Log::get_instance()->init("ServerLog", 2000, 800000, 0); //同步日志模型
-     }
+    //  if(!SYNLOG){
+    //      Log::get_instance()->init("ServerLog", 2000, 800000, 8); //异步日志模型
+    //  }
+    //  else{
+    //      Log::get_instance()->init("ServerLog", 2000, 800000, 0); //同步日志模型
+    //  }
 
     if (argc <= 1){
         printf("usage: %s ip_address port_number\n", basename(argv[0]));
@@ -282,12 +285,12 @@ int main(int argc, char *argv[]){
                 }
             }
             else if(events[i].events & EPOLLIN){
-                timer_update(sockfd, 100 * TIMESLOT);
+                timer_update(sockfd, 3 * TIMESLOT);
                 pool->append(std::bind(do_read, users, pool, sockfd));
                 // do_read(users, pool, sockfd);
             }
             else if(events[i].events & EPOLLOUT){
-                timer_update(sockfd, 100 * TIMESLOT);
+                timer_update(sockfd, 3 * TIMESLOT);
                 pool->append(std::bind(do_write, users, pool, sockfd));
                 // do_write(users, pool, sockfd);
             }

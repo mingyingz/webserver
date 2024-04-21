@@ -64,7 +64,8 @@ public:
         FORBIDDEN_REQUEST,
         FILE_REQUEST,
         INTERNAL_ERROR,
-        CLOSED_CONNECTION
+        CLOSED_CONNECTION,
+        RELOCATION
     };
     enum LINE_STATUS
     {
@@ -111,6 +112,7 @@ private:
     bool add_linger();
     bool add_blank_line();
     bool add_cookies();
+    bool add_cache();
     void get_cookie(const std::string &text);
     static std::atomic<int> m_user_count;
 

@@ -95,8 +95,6 @@ void modfd(int epollfd, int fd, int ev, TRIGMode mode){
 
 void http_conn::init(){
     mysql = NULL;
-    bytes_to_send = 0;
-    bytes_have_send = 0;
     m_check_state = CHECK_STATE_REQUESTLINE;
     m_linger = false;
     m_method = GET;
@@ -112,6 +110,7 @@ void http_conn::init(){
     memset(m_read_buf, '\0', READ_BUFFER_SIZE);
     memset(m_write_buf, '\0', WRITE_BUFFER_SIZE);
     m_real_file.clear();
+    writer->reset();
 }
 
 void http_conn::init(int sockfd, const sockaddr_in &addr, TRIGMode mode){
@@ -438,9 +437,7 @@ http_conn::HTTP_CODE http_conn::do_request()
         return BAD_REQUEST;
 
     //以只读方式获取文件描述符，通过mmap将该文件映射到内存中，mmap后可以把文件关闭
-    int fd = open(m_real_file.c_str(), O_RDONLY);
-    m_file_address = (char *)mmap(0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-    close(fd);
+    writer->file_init(m_real_file, m_file_stat);
     return FILE_REQUEST;
 }
 
@@ -524,12 +521,7 @@ bool http_conn::process_write(HTTP_CODE read_ret){
             add_status_line(200, titles[200]);
             if(m_file_stat.st_size != 0){ 
                 add_headers(m_file_stat.st_size);
-                m_iv[0].iov_base = m_write_buf;
-                m_iv[0].iov_len = m_write_idx;
-                m_iv[1].iov_base = m_file_address;
-                m_iv[1].iov_len = m_file_stat.st_size;
-                m_iv_count = 2;
-                bytes_to_send = m_write_idx + m_file_stat.st_size;
+                writer->file_modify(m_write_idx);
                 return true;
             }
             else{
@@ -571,20 +563,8 @@ bool http_conn::process_write(HTTP_CODE read_ret){
         default:
             return false;
     }
-    m_iv[0].iov_base = m_write_buf;
-    m_iv[0].iov_len = m_write_idx;
-    m_iv_count = 1;
-    bytes_to_send = m_write_idx;
+    writer->file_modify(m_write_idx);
     return true;
-}
-
-void http_conn::unmap()
-{
-    if (m_file_address != nullptr)
-    {
-        munmap(m_file_address, m_file_stat.st_size);
-        m_file_address = nullptr;
-    }
 }
 
 bool http_conn::write()
@@ -631,68 +611,7 @@ bool http_conn::write()
     //         }
     //     }
     // }
-    int temp = 0;
-
-    int &m_epollfd = get_m_epollfd();
-    if (bytes_to_send == 0)
-    {
-        modfd(m_epollfd, m_sockfd, EPOLLIN, connection_mode);
-        init();
-        return true;
-    }
-
-    while (1)
-    {
-        // std::cout << "1111111111 " << m_iv[1].iov_len << std::endl;
-        // std::cout << "to send " << bytes_to_send << std::endl;
-        // std::cout << "iv_count " << m_iv_count << std::endl;
-
-        temp = writev(m_sockfd, m_iv, m_iv_count);
-        // std::cout << "ttttttttttt: " << temp << std::endl;
-        // std::cout << "temp: " << temp << " sockfd: " << m_sockfd << std::endl;
-
-        if (temp < 0)
-        {
-            if (errno == EAGAIN)
-            {
-                modfd(m_epollfd, m_sockfd, EPOLLOUT, connection_mode);
-                return true;
-            }
-            unmap();
-            return false;
-        }
-
-        bytes_have_send += temp;
-        bytes_to_send -= temp;
-        // std::cout << bytes_have_send << " " << bytes_to_send << std::endl;
-        if (bytes_have_send >= m_iv[0].iov_len)
-        {
-            m_iv[0].iov_len = 0;
-            m_iv[1].iov_base =m_file_address + (bytes_have_send - m_write_idx);
-            m_iv[1].iov_len = bytes_to_send;
-        }
-        else
-        {
-            m_iv[0].iov_base = m_write_buf + bytes_have_send;
-            m_iv[0].iov_len = m_iv[0].iov_len - bytes_have_send;
-        }
-
-        if (bytes_to_send <= 0)
-        {
-            unmap();
-            modfd(m_epollfd, m_sockfd, EPOLLIN, connection_mode);
-
-            if (m_linger)
-            {
-                init();
-                return true;
-            }
-            else
-            {
-                return false;
-            }
-        }
-    }
+    writer->write(get_m_epollfd(), m_sockfd, m_linger);
 }
 
 void http_conn::process(){

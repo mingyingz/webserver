@@ -27,9 +27,13 @@
 #include <random>
 #include "../log/log.h"
 #include "../CGImysql/sql_connection_pool.h"
-#include<atomic>
+#include <atomic>
 
 enum TRIGMode{ET, LT};
+
+void modfd(int epollfd, int fd, int ev, TRIGMode mode);
+
+#include "http_writer.h"
 
 class http_conn
 {
@@ -73,12 +77,23 @@ public:
         LINE_BAD,
         LINE_OPEN
     };
+    enum WRITE_METHOD{
+        DEFAULT,
+        DIRICT,
+        ZEROCOPY,
+        MIXED
+    };
 
 public:
-    http_conn() {registered = true; m_sockfd = -1;};
+    http_conn() : registered(true), m_sockfd(-1){
+        std::function<void()> func = std::bind((void(http_conn::*)())&http_conn::init, this);
+        writer = std::make_unique<zero_copy_write>(m_write_buf, func, connection_mode);
+        // writer = new default_write(m_write_buf, func, connection_mode);
+    };
     ~http_conn() = default;
 
 public:
+    void init();
     void init(int sockfd, const sockaddr_in &addr, TRIGMode mode);
     void close_conn(bool real_close = true);
     void process();
@@ -93,7 +108,6 @@ public:
     void initmysql_result(std::shared_ptr<connection_pool> &connPool);
 
 private:
-    void init();
     HTTP_CODE process_read();
     bool process_write(HTTP_CODE ret);
     HTTP_CODE parse_request_line(std::string &text);
@@ -139,20 +153,16 @@ private:
     std::unordered_map<std::string, std::string> m_headers;
     int m_content_length;
     bool m_linger;
-    char *m_file_address;
     struct stat m_file_stat;
-    struct iovec m_iv[2];
-    int m_iv_count;
     int cgi;        //是否启用的POST
     std::string m_string; //存储请求头数据
-    int bytes_to_send;
-    int bytes_have_send;
     TRIGMode listen_mode;
     TRIGMode connection_mode;
     bool registered;
     std::unordered_map<std::string, std::string> cookies;
+    std::unique_ptr<http_write> writer;
+    // default_write *writer;
     
 };
-
 
 #endif

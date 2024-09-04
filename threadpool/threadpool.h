@@ -11,9 +11,6 @@
 #include <functional>
 #include <vector>
 #include <atomic>
-//#include <photon/thread/thread.h>
-//#include <photon/thread/std-compat.h>
-//#include <photon/thread/thread.h>
 
 
 
@@ -47,7 +44,6 @@ threadpool::threadpool(std::shared_ptr<connection_pool> m_connPool, int thread_n
     }
     for(int i = 0; i < thread_number; i++){
 	m_threads.emplace_back([this]{
-	    std::cout << "1111111111111111111" << std::endl;
             while(!m_stop){
                 long long t1 = get_time();
                 std::function<void()> task;
@@ -72,7 +68,6 @@ threadpool::threadpool(std::shared_ptr<connection_pool> m_connPool, int thread_n
         });
         //t.detach();
 	//m_threads.push_back(t);
-	//photon::thread_enable_join(m_threads[i]);
 	m_threads[i].detach();
     }
 }

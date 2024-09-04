@@ -178,12 +178,6 @@ int main(int argc, char *argv[]){
     //  }
 
     int ret;
-    //std::cout << photon::INIT_EVENT_DEFAULT << " " <<  photon::INIT_IO_NONE << std::endl;
-    //int ret = photon::init();
-    //if (ret != 0) {
-    //    return -1;
-    //}
-    //DEFER(photon::fini());
 
     if (argc <= 1){
         printf("usage: %s ip_address port_number\n", basename(argv[0]));

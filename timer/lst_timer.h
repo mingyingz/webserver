@@ -36,7 +36,7 @@ public:
 
     }
     void add_timer(int fd, int delay, const std::function<void(int)> &cb_func){
-        std::lock_guard<std::mutex> lock(mutex);
+        // std::lock_guard<std::mutex> lock(mutex);
         if(fd2id.find(fd) == fd2id.end()){
             array.emplace_back(fd, delay, cb_func);
             int hole = array.size() - 1;
@@ -76,7 +76,7 @@ public:
     }
 
     void adjust_timer(int fd, time_t timeout){
-        std::lock_guard<std::mutex> lock(mutex);
+        // std::lock_guard<std::mutex> lock(mutex);
         assert(fd2id.find(fd) != fd2id.end());
         int old_expire = array[fd2id[fd]].expire;
         array[fd2id[fd]].expire = timeout;
@@ -87,14 +87,14 @@ public:
     }
 
     void release_timer(int fd){
-        std::lock_guard<std::mutex> lock(mutex);
+        // std::lock_guard<std::mutex> lock(mutex);
         if(array[fd2id[fd]].cb_func != nullptr)
             array[fd2id[fd]].cb_func(fd);
     }
 
     void tick(){
         time_t cur = time(NULL);
-        std::lock_guard<std::mutex> lock(mutex);
+        // std::lock_guard<std::mutex> lock(mutex);
         while(!array.empty()){
             // if(!array[0]){
             //     break;

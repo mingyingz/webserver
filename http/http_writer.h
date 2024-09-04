@@ -159,13 +159,13 @@ public:
             // std::cout << "1111111111 " << m_iv[1].iov_len << std::endl;
             // std::cout << "to send " << bytes_to_send << std::endl;
             // std::cout << "iv_count " << m_iv_count << std::endl;
-            if(write_idx < bytes_have_send)
+            if(write_idx > bytes_have_send)
                 temp = send(sockfd, buf + bytes_have_send, write_idx - bytes_have_send, 0);
             else{
-                temp = sendfile(file_fd, sockfd, &offset, bytes_to_send);
+                temp = sendfile(sockfd, file_fd, &offset, bytes_to_send);
             }
             // std::cout << "ttttttttttt: " << temp << std::endl;
-            // std::cout << "temp: " << temp << " sockfd: " << m_sockfd << std::endl;
+            // std::cout << "temp: " << temp << " "  << offset << " " << (errno == EAGAIN) << " " << write_idx << " " << bytes_have_send << " " << bytes_to_send << " "  << std::endl;
 
             if (temp < 0)
             {

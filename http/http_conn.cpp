@@ -1,9 +1,12 @@
 #include "http_conn.h"
 #include <iostream>
 
-std::string doc_root = "/root/webserver/root";
+std::string doc_root = "/home/zhonghm/webserver/webserver/root";
 
 const int cache_contral = 30;
+
+extern std::atomic<long long> time_process;
+long long get_time();
 
 std::mutex m_mutex;
 std::unordered_map<int, std::string> titles = {
@@ -193,11 +196,12 @@ http_conn::LINE_STATUS http_conn::parse_line(){
     return LINE_OPEN;
 }
 
-http_conn::HTTP_CODE http_conn::parse_request_line(std::string &text){
+http_conn::HTTP_CODE http_conn::parse_request_line(std::string_view text){
     // printf("request_line: %s\n", text.c_str());
     std::regex patten("^([^ ]*) ([^ ]*) HTTP/([^ ]*)$");
     std::smatch subMatch;
-    if(regex_match(text, subMatch, patten)) {   
+    std::string s(text);
+    if(regex_match(s, subMatch, patten)) {   
         if(subMatch[1] == "GET"){
             m_method=GET;
         }
@@ -207,12 +211,10 @@ http_conn::HTTP_CODE http_conn::parse_request_line(std::string &text){
         }
         m_url = subMatch[2];
         if(m_url.substr(0, 7) == "http://"){
-            m_url = m_url.substr(7);
-            m_url = m_url.substr(m_url.find('/'));
+            m_url = m_url.substr(m_url.find('/', 7));
         }
-        if(m_url.substr(0, 8) == "https://"){
-            m_url = m_url.substr(8);
-            m_url = m_url.substr(m_url.find('/'));
+	else if(m_url.substr(0, 8) == "https://"){
+            m_url = m_url.substr(m_url.find('/', 8));
         }
         if(m_url[0] != '/')
             return BAD_REQUEST;
@@ -228,8 +230,8 @@ http_conn::HTTP_CODE http_conn::parse_request_line(std::string &text){
 
 }
 
-void http_conn::get_cookie(const std::string &text){
-    std::string key, value;
+void http_conn::get_cookie(std::string_view text){
+    std::string_view key, value;
     int pos = 0;
     while(pos < text.size() && pos >= 0){
         // std::cout << text << std::endl;
@@ -242,18 +244,19 @@ void http_conn::get_cookie(const std::string &text){
         if(value_len == 0)
             break;
         value = text.substr(pos, value_len);
-        cookies[key] = value;
+        cookies[std::string(key)] = value;
         pos += value_len + 1;
     }
 }
 
-http_conn::HTTP_CODE http_conn::parse_headers(std::string &text){
+http_conn::HTTP_CODE http_conn::parse_headers(std::string_view text){
     std::regex patten("^([^:]*): ?(.*)$");
     std::smatch subMatch;
     
     // std::cout << "-----------------header----------------" << std::endl;
     // std::cout << text << std::endl;
-    if(std::regex_match(text, subMatch, patten)) {
+    std::string s(text);
+    if(std::regex_match(s, subMatch, patten)) {
         m_headers[subMatch[1]] = subMatch[2];
         if(subMatch[1] == "Connection"){
             if(subMatch[2] == "keep-alive")
@@ -263,7 +266,7 @@ http_conn::HTTP_CODE http_conn::parse_headers(std::string &text){
             m_content_length = stoi(subMatch[2]);
         }
         else if(subMatch[1] == "Cookie"){
-            get_cookie(subMatch[2]);
+            get_cookie(subMatch[2].str());
             // std::cout << cookies["LoginToken"] << std::endl;
             if(login_token.find(cookies["LoginToken"]) != login_token.end()){
                 registered = true;
@@ -280,7 +283,7 @@ http_conn::HTTP_CODE http_conn::parse_headers(std::string &text){
     }
 }
 
-http_conn::HTTP_CODE http_conn::parse_content(std::string &text){
+http_conn::HTTP_CODE http_conn::parse_content(std::string_view text){
     if (m_read_idx >= (m_content_length + m_checked_idx)){
         //text[m_content_length] = '\0';
         //POST请求中最后为输入的用户名和密码
@@ -293,14 +296,14 @@ http_conn::HTTP_CODE http_conn::parse_content(std::string &text){
 http_conn::HTTP_CODE http_conn::process_read(){
     LINE_STATUS line_status = LINE_OK;
     HTTP_CODE ret = NO_REQUEST;
-    std::string text;
+    std::string_view text;
 
     while((m_check_state==CHECK_STATE_CONTENT && line_status == LINE_OK) || ((line_status = parse_line()) == LINE_OK)){
 	    text = get_line();
         m_start_line = m_checked_idx;
         // std::cout << text << 1 << std::endl;
         // std::cout << (int) m_read_buf[m_start_line - 3] << m_read_buf[m_start_line - 1] << std::endl;
-        LOG_INFO("http:  %s", text.c_str());
+        LOG_INFO("http:  %s", text.data());
         // Log::get_instance()->write_log(1, "%s", text);
         Log::get_instance()->flush();
 
@@ -472,7 +475,7 @@ bool http_conn::add_content_length(int content_len){
 bool http_conn::add_headers(int content_len){
     add_content_length(content_len);
     add_linger();
-    add_cookies();
+    //add_cookies();
     add_cache();
     add_blank_line();
     return true;
@@ -611,10 +614,12 @@ bool http_conn::write()
     //         }
     //     }
     // }
-    writer->write(get_m_epollfd(), m_sockfd, m_linger);
+    assert(writer.get() != nullptr);
+    return writer->write(get_m_epollfd(), m_sockfd, m_linger);
 }
 
 void http_conn::process(){
+    long long t1 = get_time();
     HTTP_CODE read_ret = process_read();
     int &m_epollfd = get_m_epollfd();
 
@@ -627,6 +632,9 @@ void http_conn::process(){
         close_conn();
     }
     modfd(m_epollfd, m_sockfd, EPOLLOUT, connection_mode);
+    long long t2 = get_time();
+    assert(t2 >= t1);
+    time_process.fetch_add(t2 - t1);
 }
 
 void http_conn::close_conn(bool real_close){

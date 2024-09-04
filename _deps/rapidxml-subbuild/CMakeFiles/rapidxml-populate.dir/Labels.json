@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/zhonghm/webserver/webserver/_deps/rapidxml-subbuild/CMakeFiles/rapidxml-populate"
+		},
+		{
+			"file" : "/home/zhonghm/webserver/webserver/_deps/rapidxml-subbuild/CMakeFiles/rapidxml-populate.rule"
+		},
+		{
+			"file" : "/home/zhonghm/webserver/webserver/_deps/rapidxml-subbuild/CMakeFiles/rapidxml-populate-complete.rule"
+		},
+		{
+			"file" : "/home/zhonghm/webserver/webserver/_deps/rapidxml-subbuild/rapidxml-populate-prefix/src/rapidxml-populate-stamp/rapidxml-populate-install.rule"
+		},
+		{
+			"file" : "/home/zhonghm/webserver/webserver/_deps/rapidxml-subbuild/rapidxml-populate-prefix/src/rapidxml-populate-stamp/rapidxml-populate-mkdir.rule"
+		},
+		{
+			"file" : "/home/zhonghm/webserver/webserver/_deps/rapidxml-subbuild/rapidxml-populate-prefix/src/rapidxml-populate-stamp/rapidxml-populate-download.rule"
+		},
+		{
+			"file" : "/home/zhonghm/webserver/webserver/_deps/rapidxml-subbuild/rapidxml-populate-prefix/src/rapidxml-populate-stamp/rapidxml-populate-patch.rule"
+		},
+		{
+			"file" : "/home/zhonghm/webserver/webserver/_deps/rapidxml-subbuild/rapidxml-populate-prefix/src/rapidxml-populate-stamp/rapidxml-populate-configure.rule"
+		},
+		{
+			"file" : "/home/zhonghm/webserver/webserver/_deps/rapidxml-subbuild/rapidxml-populate-prefix/src/rapidxml-populate-stamp/rapidxml-populate-build.rule"
+		},
+		{
+			"file" : "/home/zhonghm/webserver/webserver/_deps/rapidxml-subbuild/rapidxml-populate-prefix/src/rapidxml-populate-stamp/rapidxml-populate-test.rule"
+		},
+		{
+			"file" : "/home/zhonghm/webserver/webserver/_deps/rapidxml-subbuild/rapidxml-populate-prefix/src/rapidxml-populate-stamp/rapidxml-populate-skip-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"rapidxml-populate"
+		],
+		"name" : "rapidxml-populate"
+	}
+}

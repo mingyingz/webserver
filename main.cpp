@@ -10,14 +10,28 @@
 #include "./http/http_conn.h"
 #include "./log/log.h"
 #include "./CGImysql/sql_connection_pool.h"
+#include <atomic>
 
 const int MAX_FD = 65536;
 const int TIMESLOT = 5;
 const int MAX_EVENT_NUMBER = 10000;
 const bool SYNLOG = false;
 
+int count = 0;
 const TRIGMode connection_mode = ET;
 const TRIGMode listen_mode = LT;
+std::atomic<long long> time_read(0);
+std::atomic<long long> time_process(0);
+std::atomic<long long> time_write(0);
+std::atomic<long long> time_epoll(0);
+std::atomic<long long> time_add(0);
+std::atomic<long long> time_wait(0);
+std::atomic<long long> time_timer(0);
+std::atomic<long long> time_loop(0);
+std::atomic<long long> time_listen(0);
+std::atomic<long long> time_rw(0);
+std::atomic<long long> time_close(0);
+
 
 static int epollfd = 0;
 
@@ -40,14 +54,28 @@ void sig_handler(int sig){
     
 }
 
+long long get_time(){
+    timeval currentTime;
+    gettimeofday(&currentTime, nullptr);
+    return (long long)currentTime.tv_sec * 1000000 + currentTime.tv_usec;
+
+}
+
 void timer_update(int fd, int delay){
+    long long t1 = get_time();
     LOG_INFO("%s", "adjust timer once");
     Log::get_instance()->flush();
     timers->adjust_timer(fd, time(NULL) + delay);
+    long long t2 = get_time();
+    time_timer.fetch_add(t2 - t1);
 }
 
+
 void do_read(std::unordered_map<int, std::shared_ptr<http_conn>> &users, std::weak_ptr<threadpool> pool, int sockfd){
+    long long t1 = get_time();
     bool read_ret = users[sockfd]->read_once();
+    long long t2 = get_time();
+    time_read.fetch_add(t2 - t1);
     if(read_ret){
         LOG_INFO("deal with the client(%s)", inet_ntoa(users[sockfd]->get_address()->sin_addr));
         Log::get_instance()->flush();
@@ -56,19 +84,31 @@ void do_read(std::unordered_map<int, std::shared_ptr<http_conn>> &users, std::we
             assert(0);
             return;
         }
-        pool_ptr->append(std::bind(&http_conn::process, users[sockfd]));
-        // users[sockfd]->process();
+        //pool_ptr->append(std::bind(&http_conn::process, ptr));
+        //pool_ptr->append([users, sockfd](){users[sockfd]->process();});
+	std::shared_ptr<http_conn> ptr = users[sockfd];
+	assert(ptr);
+	//std::cout << users.size() << std::endl;
+	auto func = [ptr]() {ptr->process();};
+	pool_ptr->append(func);
+	//users[sockfd]->process();
         // timer_update(sockfd, 3 * TIMESLOT);
     }
     else{
         // std::cout << "rrrrrrr: " << sockfd << std::endl;
         // timer_update(sockfd, 10 * TIMESLOT);
+        // printf("read fail\n");
+        // printf("read fail\n");
         timers->release_timer(sockfd);
     }
 }
 
 void do_write(std::unordered_map<int, std::shared_ptr<http_conn>> &users, std::weak_ptr<threadpool> pool, int sockfd){
-    bool read_ret = users[sockfd]->write();
+    long long t1 = get_time();
+    std::shared_ptr<http_conn> ptr = users[sockfd];
+    bool read_ret = ptr->write();
+    long long t2 = get_time();
+    time_write.fetch_add(t2 - t1);
     if(read_ret){
         LOG_INFO("deal with the client(%s)", inet_ntoa(users[sockfd]->get_address()->sin_addr));
         Log::get_instance()->flush();
@@ -86,6 +126,7 @@ void do_write(std::unordered_map<int, std::shared_ptr<http_conn>> &users, std::w
         // timer_update(sockfd, 10 * TIMESLOT);
         
         // std::cout << "wwwwwwwwww: " << sockfd << std::endl;
+        // printf("write fail\n");
         timers->release_timer(sockfd);
     }
 }
@@ -101,8 +142,11 @@ void addsig(int sig, void (handler) (int), bool restart = true){
 }
 
 void timer_handler(){
+    long long t1 = get_time();
     timers->tick();
     alarm(TIMESLOT);
+    long long t2 = get_time();
+    time_timer.fetch_add(t2 - t1);
 
 }
 
@@ -133,6 +177,14 @@ int main(int argc, char *argv[]){
     //      Log::get_instance()->init("ServerLog", 2000, 800000, 0); //同步日志模型
     //  }
 
+    int ret;
+    //std::cout << photon::INIT_EVENT_DEFAULT << " " <<  photon::INIT_IO_NONE << std::endl;
+    //int ret = photon::init();
+    //if (ret != 0) {
+    //    return -1;
+    //}
+    //DEFER(photon::fini());
+
     if (argc <= 1){
         printf("usage: %s ip_address port_number\n", basename(argv[0]));
         return 1;
@@ -143,7 +195,7 @@ int main(int argc, char *argv[]){
     connPool->init("localhost", "root", "123456", "webserver", 3306, 8);
     timers = std::make_unique<time_heap>();
 
-    std::shared_ptr<threadpool> pool = std::make_shared<threadpool>(connPool, 16);
+    std::shared_ptr<threadpool> pool = std::make_shared<threadpool>(connPool, 15);
 
     users[0]->initmysql_result(connPool);
 
@@ -168,7 +220,7 @@ int main(int argc, char *argv[]){
 
     int flag = 1;
     setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag));
-    int ret = bind(listenfd, (struct sockaddr *)&address, sizeof(address));
+    ret = bind(listenfd, (struct sockaddr *)&address, sizeof(address));
     assert(ret >= 0);
     ret = listen(listenfd, 5);
     assert(ret >= 0);
@@ -199,14 +251,20 @@ int main(int argc, char *argv[]){
     alarm(TIMESLOT);
 
     while(!stop_server){
+        long long t1 = get_time();
         int number = epoll_wait(epollfd, events, MAX_EVENT_NUMBER, -1);
+        long long t2 = get_time();
+        time_epoll.fetch_add(t2 - t1);
+	count++;
         if(number < 0 && errno != EINTR){
             break;
         }
         // std:: cout << "========================================" << std::endl;
+        t1 = get_time();
         for(int i = 0; i < number; i++){
             int sockfd = events[i].data.fd;
             if(sockfd == listenfd){
+        	long long t1 = get_time();
                 struct sockaddr_in client_address;
                 socklen_t client_addrlength = sizeof(client_address);
                 if(listen_mode == LT){
@@ -252,6 +310,8 @@ int main(int argc, char *argv[]){
                         continue;
                     }
                 }
+        	long long t2 = get_time();
+        	time_listen.fetch_add(t2 - t1);
             }
             else if(events[i].events & (EPOLLHUP | EPOLLRDHUP | EPOLLERR)){
                 users[sockfd]->close_conn();
@@ -286,18 +346,59 @@ int main(int argc, char *argv[]){
             }
             else if(events[i].events & EPOLLIN){
                 timer_update(sockfd, 3 * TIMESLOT);
-                pool->append(std::bind(do_read, users, pool, sockfd));
-                // do_read(users, pool, sockfd);
+                long long t1 = get_time();
+                // auto func = std::bind(do_read, users, pool, sockfd);
+                // pool->append(func);
+                do_read(users, pool, sockfd);
+                long long t2 = get_time();
+                time_rw.fetch_add(t2 - t1);
             }
             else if(events[i].events & EPOLLOUT){
                 timer_update(sockfd, 3 * TIMESLOT);
-                pool->append(std::bind(do_write, users, pool, sockfd));
-                // do_write(users, pool, sockfd);
+    		    long long t1 = get_time();
+                //auto func = std::bind(do_write, users, pool, sockfd);
+                // auto func = [=, &users](){do_write(users, pool, sockfd);};
+                long long t2 = get_time();
+                time_close.fetch_add(t2 - t1);
+                t1 = get_time();
+                // pool->append(func);
+                do_write(users, pool, sockfd);
+                t2 = get_time();
+                time_rw.fetch_add(t2 - t1);
+            }
+            else{
+                assert(0);
             }
 
         }
+        t2 = get_time();
+        time_loop.fetch_add(t2 - t1);
         if (timeout){
             printf("timeout\n");
+	    std::cout << "read time: " << time_read << std::endl;
+            std::cout << "write time: " << time_write << std::endl;
+            std::cout << "process time: " << time_process << std::endl;
+            std::cout << "epoll time: " << time_epoll << std::endl;
+            std::cout << "add time: " << time_add << std::endl;
+            std::cout << "wait time: " << time_wait << std::endl;
+            std::cout << "timer time: " << time_timer << std::endl;
+            std::cout << "loop time: " << time_loop << std::endl;
+            std::cout << "listen time: " << time_listen << std::endl;
+            std::cout << "rw time: " << time_rw << std::endl;
+            std::cout << "close time: " << time_close << std::endl;
+            std::cout << "count: " << count << std::endl;
+	    count = 0;
+            time_read = 0;
+            time_process = 0;
+            time_wait = 0;
+            time_add = 0;
+            time_epoll = 0;
+            time_write = 0;
+            time_timer = 0;
+            time_loop = 0;
+            time_listen = 0;
+            time_rw = 0;
+            time_close = 0;
             timer_handler();
             timeout = false;
         }

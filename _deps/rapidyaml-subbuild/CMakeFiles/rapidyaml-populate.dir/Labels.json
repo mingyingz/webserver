@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/zhonghm/webserver/webserver/_deps/rapidyaml-subbuild/CMakeFiles/rapidyaml-populate"
+		},
+		{
+			"file" : "/home/zhonghm/webserver/webserver/_deps/rapidyaml-subbuild/CMakeFiles/rapidyaml-populate.rule"
+		},
+		{
+			"file" : "/home/zhonghm/webserver/webserver/_deps/rapidyaml-subbuild/CMakeFiles/rapidyaml-populate-complete.rule"
+		},
+		{
+			"file" : "/home/zhonghm/webserver/webserver/_deps/rapidyaml-subbuild/rapidyaml-populate-prefix/src/rapidyaml-populate-stamp/rapidyaml-populate-install.rule"
+		},
+		{
+			"file" : "/home/zhonghm/webserver/webserver/_deps/rapidyaml-subbuild/rapidyaml-populate-prefix/src/rapidyaml-populate-stamp/rapidyaml-populate-mkdir.rule"
+		},
+		{
+			"file" : "/home/zhonghm/webserver/webserver/_deps/rapidyaml-subbuild/rapidyaml-populate-prefix/src/rapidyaml-populate-stamp/rapidyaml-populate-download.rule"
+		},
+		{
+			"file" : "/home/zhonghm/webserver/webserver/_deps/rapidyaml-subbuild/rapidyaml-populate-prefix/src/rapidyaml-populate-stamp/rapidyaml-populate-patch.rule"
+		},
+		{
+			"file" : "/home/zhonghm/webserver/webserver/_deps/rapidyaml-subbuild/rapidyaml-populate-prefix/src/rapidyaml-populate-stamp/rapidyaml-populate-configure.rule"
+		},
+		{
+			"file" : "/home/zhonghm/webserver/webserver/_deps/rapidyaml-subbuild/rapidyaml-populate-prefix/src/rapidyaml-populate-stamp/rapidyaml-populate-build.rule"
+		},
+		{
+			"file" : "/home/zhonghm/webserver/webserver/_deps/rapidyaml-subbuild/rapidyaml-populate-prefix/src/rapidyaml-populate-stamp/rapidyaml-populate-test.rule"
+		},
+		{
+			"file" : "/home/zhonghm/webserver/webserver/_deps/rapidyaml-subbuild/rapidyaml-populate-prefix/src/rapidyaml-populate-stamp/rapidyaml-populate-skip-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"rapidyaml-populate"
+		],
+		"name" : "rapidyaml-populate"
+	}
+}

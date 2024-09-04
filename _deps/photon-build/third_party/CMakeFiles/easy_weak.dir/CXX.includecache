@@ -1,0 +1,20 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/zhonghm/webserver/webserver/_deps/photon-src/third_party/easy_weak/easy_weak.cpp
+easy_weak.h
+/home/zhonghm/webserver/webserver/_deps/photon-src/third_party/easy_weak/easy_weak.h
+cstdio
+-
+cerrno
+-
+
+/home/zhonghm/webserver/webserver/_deps/photon-src/third_party/easy_weak/easy_weak.h
+cstdint
+-
+

@@ -25,6 +25,8 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <random>
+#include <functional>
+#include <string_view>
 #include "../log/log.h"
 #include "../CGImysql/sql_connection_pool.h"
 #include <atomic>
@@ -87,7 +89,7 @@ public:
 public:
     http_conn() : registered(true), m_sockfd(-1){
         std::function<void()> func = std::bind((void(http_conn::*)())&http_conn::init, this);
-        writer = std::make_unique<zero_copy_write>(m_write_buf, func, connection_mode);
+        writer = std::make_unique<default_write>(m_write_buf, func, connection_mode);
         // writer = new default_write(m_write_buf, func, connection_mode);
     };
     ~http_conn() = default;
@@ -110,11 +112,11 @@ public:
 private:
     HTTP_CODE process_read();
     bool process_write(HTTP_CODE ret);
-    HTTP_CODE parse_request_line(std::string &text);
-    HTTP_CODE parse_headers(std::string &text);
-    HTTP_CODE parse_content(std::string &text);
+    HTTP_CODE parse_request_line(std::string_view text);
+    HTTP_CODE parse_headers(std::string_view text);
+    HTTP_CODE parse_content(std::string_view text);
     HTTP_CODE do_request();
-    std::string get_line() { return std::string(m_read_buf + m_start_line); };
+    std::string_view get_line() { return m_read_buf + m_start_line; };
     LINE_STATUS parse_line();
     void unmap();
     bool add_response(const char* format, ...);
@@ -127,7 +129,7 @@ private:
     bool add_blank_line();
     bool add_cookies();
     bool add_cache();
-    void get_cookie(const std::string &text);
+    void get_cookie(std::string_view text);
     static std::atomic<int> m_user_count;
 
 public:

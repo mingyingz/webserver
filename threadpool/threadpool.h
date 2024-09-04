@@ -10,12 +10,22 @@
 #include <assert.h>
 #include <functional>
 #include <vector>
+#include <atomic>
+//#include <photon/thread/thread.h>
+//#include <photon/thread/std-compat.h>
+//#include <photon/thread/thread.h>
+
+
 
 #include "../CGImysql/sql_connection_pool.h"
 
+extern std::atomic<long long> time_add;
+extern std::atomic<long long> time_wait;
+long long get_time();
+
 class threadpool{
 public:
-    threadpool(std::shared_ptr<connection_pool> m_connPool, int thread_number = 8, int max_requests = 10000);
+    threadpool(std::shared_ptr<connection_pool> m_connPool, int thread_number = 8, int max_requests = 40000);
     ~threadpool();
     template <typename F>
     bool append(F&& task);
@@ -36,8 +46,10 @@ threadpool::threadpool(std::shared_ptr<connection_pool> m_connPool, int thread_n
         throw std::exception();
     }
     for(int i = 0; i < thread_number; i++){
-        m_threads.emplace_back([this]{
+	m_threads.emplace_back([this]{
+	    std::cout << "1111111111111111111" << std::endl;
             while(!m_stop){
+                long long t1 = get_time();
                 std::function<void()> task;
                 {
                     std::unique_lock<std::mutex> lock(m_queuemutex);
@@ -52,10 +64,16 @@ threadpool::threadpool(std::shared_ptr<connection_pool> m_connPool, int thread_n
                 }
                 if(!task)
                     continue;
+
+                long long t2 = get_time();
+                time_wait.fetch_add(t2 - t1);
                 task();
             }
         });
-        m_threads[i].detach();
+        //t.detach();
+	//m_threads.push_back(t);
+	//photon::thread_enable_join(m_threads[i]);
+	m_threads[i].detach();
     }
 }
 
@@ -69,6 +87,7 @@ threadpool::~threadpool(){
 
 template<typename F>
 bool threadpool::append(F&& task){
+    long long t1 = get_time();
     {
         std::unique_lock<std::mutex> lock(m_queuemutex);
         // std::cout << "sssssssssssssss " << m_workqueue.size() << std::endl;
@@ -78,6 +97,8 @@ bool threadpool::append(F&& task){
         m_workqueue.emplace_back(std::forward<F>(task));
     }
     m_queuecond.notify_one();
+    long long t2 = get_time();
+    time_add.fetch_add(t2 - t1);
     return true;
 }
 
